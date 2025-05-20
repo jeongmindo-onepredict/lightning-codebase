@@ -6,7 +6,7 @@ seed_everything: 42
 trainer:
   accelerator: auto
   precision: 16-mixed
-  max_epochs: 300
+  max_epochs: 100
   deterministic: true
   plugins:
     - AsyncCheckpointIO
@@ -16,27 +16,34 @@ trainer:
         monitor: ${model_ckpt.monitor}
         mode: ${model_ckpt.mode}
 
+# Model configs
 model:
-  class_path: DefaultModel
+  class_path: models.car_classifier.CarClassifier
   init_args:
     net:
-      class_path: Cifar10Resnet18
+      class_path: nets.tresnet.TResNetL
       init_args:
-        num_classes: 10
+        num_classes: 394
+        pretrained: true
+    loss:
+      class_path: losses.car_loss.CarLoss
+      init_args:
+        margin_init: 0.5
+        margin_final: 0.1
+        num_epochs: ${trainer.max_epochs}
+    learning_rate: 0.0001
+    weight_decay: 0.0001
+    vis_per_batch: 4
 
-    criterion:
-      class_path: CrossEntropyLoss
-
-    vis_per_batch: 0
-
+# Data configs
 data:
-  class_path: Cifar10DataModule
+  class_path: datasets.car_dataset.CarDataModule
   init_args:
-    root: data
-    batch_size: 128
-    val_split: 0.1
+    root: datasets  # Update with your actual path
+    batch_size: 32
     transforms:
-      class_path: DefaultTransforms
+      class_path: transforms.car_transforms.CarTransforms
+    num_workers: 4
 
 optimizer:
   class_path: SGD
