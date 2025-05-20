@@ -1,12 +1,12 @@
 # lightning.pytorch==2.0.0
-name: tresnet-pmd-aug
-version: v14
+name: tresnet-pmd-hood-aug
+version: v3
 
 seed_everything: 42
 trainer:
   accelerator: auto
   precision: 16-mixed
-  max_epochs: 100
+  max_epochs: 300
   # deterministic: true
   deterministic: false
   benchmark: true  # CUDA 벤치마킹 활성화로 성능 향상
@@ -44,7 +44,7 @@ data:
     root: datasets  # Update with your actual path
     batch_size: 256
     transforms:
-      class_path: transforms.car_transforms.CarTransforms
+      class_path: transforms.hood.CarTransforms
     num_workers: 4
 
 # optimizer:

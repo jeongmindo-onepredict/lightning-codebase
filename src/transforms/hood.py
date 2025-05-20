@@ -58,6 +58,7 @@ class CarTransforms(BaseTransforms):
 
     def train_transform(self):
         return transforms.Compose([
+            # PIL 이미지에 적용되는 변환
             transforms.Resize((320, 320)),  # 더 큰 이미지로 시작
             LowAngleTransform(max_angle=40, p=self.low_angle_prob),  # 밑에서 위로 촬영 시뮬레이션
             HoodOpenSimulation(p=self.hood_open_prob),  # 본넷 열림 시뮬레이션
@@ -69,18 +70,22 @@ class CarTransforms(BaseTransforms):
             transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),
             # 그림자 효과 시뮬레이션을 위한 부분적 밝기 감소
             transforms.Lambda(lambda img: TF.adjust_brightness(img, brightness_factor=0.7) 
-                             if random.random() < 0.3 else img),
+                            if random.random() < 0.3 else img),
             transforms.RandomGrayscale(p=0.05),
-            transforms.RandomErasing(p=0.3, scale=(0.02, 0.2)),  # 일부 영역 삭제
+            
+            # PIL 이미지를 텐서로 변환
             transforms.ToTensor(),
+            
+            # 텐서에만 적용되는 변환
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             transforms.RandomApply([transforms.GaussianBlur(kernel_size=5)], p=0.1),
+            transforms.RandomErasing(p=0.3, scale=(0.02, 0.2)),  # ToTensor 이후에 위치
         ])
 
     def val_transform(self):
         return transforms.Compose([
             transforms.Resize((256, 256)),
-            transforms.CenterCrop(224),
+            # transforms.CenterCrop(224),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
