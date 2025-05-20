@@ -1,6 +1,6 @@
 # lightning.pytorch==2.0.0
-name: tresnet-pmd-hood-aug
-version: v3
+name: siglip-aug
+version: v6
 
 seed_everything: 42
 trainer:
@@ -23,7 +23,7 @@ model:
   class_path: models.car_classifier.CarClassifier
   init_args:
     net:
-      class_path: nets.tresnet.TResNetL
+      class_path: nets.siglip.Siglip
       init_args:
         num_classes: 396
         pretrained: true
@@ -42,9 +42,9 @@ data:
   class_path: datasets.car_dataset.CarDataModule
   init_args:
     root: datasets  # Update with your actual path
-    batch_size: 256
+    batch_size: 16
     transforms:
-      class_path: transforms.hood.CarTransforms
+      class_path: transforms.car_transforms.CarTransforms
     num_workers: 4
 
 # optimizer:
