@@ -1,6 +1,6 @@
 # lightning.pytorch==2.0.0
 name: tresnet-pmd-aug
-version: v1
+version: v14
 
 seed_everything: 42
 trainer:

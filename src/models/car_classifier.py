@@ -101,9 +101,9 @@ class CarClassifier(L.LightningModule):
             self.visualize_samples(img, labels, preds, batch_idx)
         
         return {"loss": loss, "preds": preds, "labels": labels}
-
+    
     def visualize_samples(self, images, labels, preds, batch_idx):
-        if batch_idx > 5:  # 처음 몇 개 배치만 시각화
+        if batch_idx % 5 != 1:  # 처음 몇 개 배치만 시각화
             return
             
         # 데이터로더에서 클래스 이름 가져오기
@@ -112,22 +112,18 @@ class CarClassifier(L.LightningModule):
         else:
             class_names = [str(i) for i in range(self.net.model.num_classes)]
             
+        # ImageNet 정규화 값을 사용하여 역정규화 수행
+        mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1).to(images.device)
+        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1).to(images.device)
+            
         # 각 샘플에 대해 시각화
         for i in range(min(len(images), self.vis_per_batch)):
-            img = images[i].permute(1, 2, 0).cpu().numpy()
+            # 이미지 역정규화
+            img = images[i].clone()  # 원본 이미지 복사
+            img = img * std + mean   # 역정규화
             
-            # Proper denormalization - assuming standard ImageNet normalization
-            # If using different normalization, adjust these values accordingly
-            mean = np.array([0.485, 0.456, 0.406])
-            std = np.array([0.229, 0.224, 0.225])
-            
-            # Denormalize: img = img * std + mean
-            img = std * img + mean
-            
-            # Clip to ensure values are in [0, 1] range
-            img = np.clip(img, 0, 1)
-            
-            # Convert to uint8 [0, 255]
+            # [0, 1] 범위로 클리핑 후 [0, 255] 범위로 변환
+            img = torch.clamp(img, 0, 1).permute(1, 2, 0).cpu().numpy()
             img = (img * 255).astype("uint8")
             
             true_label = class_names[labels[i].item()]
@@ -138,7 +134,7 @@ class CarClassifier(L.LightningModule):
                 true_label,
                 pred_label
             )
-            
+
     def on_validation_epoch_end(self) -> None:
         # Wandb 테이블 로깅
         if self.vis_per_batch and self.is_wandb and hasattr(self, "val_table"):
