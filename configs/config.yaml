@@ -1,6 +1,6 @@
 # lightning.pytorch==2.0.0
-name: tresnet-pmd
-version: v1
+name: tresnet-pmd-aug
+version: v2
 
 seed_everything: 42
 trainer:
@@ -42,7 +42,7 @@ data:
   class_path: datasets.car_dataset.CarDataModule
   init_args:
     root: datasets  # Update with your actual path
-    batch_size: 128
+    batch_size: 256
     transforms:
       class_path: transforms.car_transforms.CarTransforms
     num_workers: 4
