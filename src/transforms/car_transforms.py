@@ -9,7 +9,7 @@ class CarTransforms(BaseTransforms):
     def train_transform(self):
         return transforms.Compose([
             # PIL 이미지에 적용되는 변환
-            transforms.Resize((384, 384)),
+            transforms.Resize((256, 256)),
             # transforms.RandomResizedCrop(224, scale=(0.6, 1.0)),
             transforms.RandomHorizontalFlip(),
             transforms.RandomRotation(20),
@@ -29,7 +29,7 @@ class CarTransforms(BaseTransforms):
 
     def val_transform(self):
         return transforms.Compose([
-            transforms.Resize((384, 384)),
+            transforms.Resize((256, 256)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])

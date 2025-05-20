@@ -1,6 +1,6 @@
 # lightning.pytorch==2.0.0
 name: siglip-giant-aug
-version: v10
+version: v11
 
 seed_everything: 42
 trainer:
@@ -42,7 +42,7 @@ data:
   class_path: datasets.car_dataset.CarDataModule
   init_args:
     root: datasets  # Update with your actual path
-    batch_size: 1
+    batch_size: 4
     transforms:
       class_path: transforms.car_transforms.CarTransforms
     num_workers: 4
