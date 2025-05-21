@@ -23,8 +23,9 @@ model:
   class_path: models.car_classifier.CarClassifier
   init_args:
     net:
-      class_path: nets.siglip.Siglip
+      class_path: nets.timm.TimmModel
       init_args:
+        model_name: "eva02_large_patch14_448.mim_m38m_ft_in22k_in1k"
         num_classes: 396
         pretrained: true
     loss_fn:
@@ -45,6 +46,8 @@ data:
     batch_size: 16
     transforms:
       class_path: transforms.car_transforms.CarTransforms
+      init_args:
+        img_size: 448
     num_workers: 4
 
 # optimizer:

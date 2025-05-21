@@ -3,13 +3,15 @@ from .base import BaseTransforms
 
 
 class CarTransforms(BaseTransforms):
-    def __init__(self):
+    def __init__(self, img_size=384):
         super().__init__()
+
+        self.img_size = img_size
 
     def train_transform(self):
         return transforms.Compose([
             # PIL 이미지에 적용되는 변환
-            transforms.Resize((384, 384)),
+            transforms.Resize((self.img_size, self.img_size)),
             # transforms.RandomResizedCrop(224, scale=(0.6, 1.0)),
             transforms.RandomHorizontalFlip(),
             transforms.RandomRotation(20),
@@ -29,7 +31,7 @@ class CarTransforms(BaseTransforms):
 
     def val_transform(self):
         return transforms.Compose([
-            transforms.Resize((384, 384)),
+            transforms.Resize((self.img_size, self.img_size)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
