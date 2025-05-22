@@ -1,5 +1,5 @@
 # lightning.pytorch==2.0.0
-name: google/vit-base-patch16-224-in21k
+name: google/siglip2-giant-opt-patch16-256
 version: v19
 
 seed_everything: 42
@@ -25,7 +25,7 @@ model:
     net:
       class_path: nets.hf.HFNetwork
       init_args:
-        model_name: "google/vit-base-patch16-224-in21k"
+        model_name: "google/siglip2-giant-opt-patch16-256"
     loss_fn:
       class_path: torch.nn.CrossEntropyLoss
       init_args:
@@ -39,11 +39,11 @@ data:
   class_path: datasets.car_dataset.CarDataModule
   init_args:
     root: datasets  # Update with your actual path
-    batch_size: 8
+    batch_size: 1
     transforms:
       class_path: transforms.car_transforms.CarTransforms
       init_args:
-        img_size: 224
+        img_size: 256
     num_workers: 4
 
 # optimizer:
