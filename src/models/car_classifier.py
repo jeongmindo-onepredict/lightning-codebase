@@ -33,9 +33,9 @@ class CarClassifier(L.LightningModule):
         self.criterion = loss_fn
         
         # 메트릭 초기화
-        self.train_accuracy = Accuracy(task="multiclass", num_classes=self.net.model.num_classes)
-        self.val_accuracy = Accuracy(task="multiclass", num_classes=self.net.model.num_classes)
-        self.test_accuracy = Accuracy(task="multiclass", num_classes=self.net.model.num_classes)
+        self.train_accuracy = Accuracy(task="multiclass", num_classes=self.net.num_classes)
+        self.val_accuracy = Accuracy(task="multiclass", num_classes=self.net.num_classes)
+        self.test_accuracy = Accuracy(task="multiclass", num_classes=self.net.num_classes)
         
     def forward(self, x):
         return self.net(x)
@@ -110,7 +110,7 @@ class CarClassifier(L.LightningModule):
         if hasattr(self.trainer.datamodule.train_dataset, "classes"):
             class_names = self.trainer.datamodule.train_dataset.classes
         else:
-            class_names = [str(i) for i in range(self.net.model.num_classes)]
+            class_names = [str(i) for i in range(self.net.num_classes)]
             
         # ImageNet 정규화 값을 사용하여 역정규화 수행
         mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1).to(images.device)

@@ -1,12 +1,12 @@
 # lightning.pytorch==2.0.0
-name: siglip-aug
-version: v6
+name: google/siglip2-giant-opt-patch16-256
+version: v9
 
 seed_everything: 42
 trainer:
   accelerator: auto
   precision: 16-mixed
-  max_epochs: 300
+  max_epochs: 200
   # deterministic: true
   deterministic: false
   benchmark: true  # CUDA 벤치마킹 활성화로 성능 향상
@@ -23,17 +23,17 @@ model:
   class_path: models.car_classifier.CarClassifier
   init_args:
     net:
-      class_path: nets.timm.TimmModel
+      class_path: nets.hf.HFNetwork
       init_args:
-        model_name: "eva02_large_patch14_448.mim_m38m_ft_in22k_in1k"
+        model_name: "google/siglip2-giant-opt-patch16-256"
         num_classes: 396
-        pretrained: true
+        dropout_rate: 0.1
+        freeze_backbone: false
+        img_size: 256
     loss_fn:
-      class_path: losses.pmd_loss.ProgressiveMarginDecayingLoss
+      class_path: torch.nn.CrossEntropyLoss
       init_args:
-        margin_init: 0.5
-        margin_final: 0.1
-        num_epochs: ${trainer.max_epochs}
+        label_smoothing: 0.1
     learning_rate: 0.0001
     weight_decay: 0.0001
     vis_per_batch: 4
@@ -43,11 +43,11 @@ data:
   class_path: datasets.car_dataset.CarDataModule
   init_args:
     root: datasets  # Update with your actual path
-    batch_size: 8
+    batch_size: 1
     transforms:
       class_path: transforms.car_transforms.CarTransforms
       init_args:
-        img_size: 448
+        img_size: 256
     num_workers: 4
 
 # optimizer:
