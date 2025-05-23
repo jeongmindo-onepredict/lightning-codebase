@@ -1,6 +1,6 @@
 # lightning.pytorch==2.0.0
 name: tresnet_xl-fold-1
-version: v8
+version: v19
 
 seed_everything: 42
 trainer:
@@ -47,6 +47,8 @@ data:
     batch_size: 32
     transforms:
       class_path: transforms.car_transforms.CarTransforms
+      init_args:
+        img_size: 600
     num_workers: 4
 
 # optimizer:
