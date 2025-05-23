@@ -153,6 +153,73 @@ class CarClassifier(L.LightningModule):
         
         return {"preds": preds, "labels": labels}
     
+    def on_predict_start(self) -> None:
+        """예측 시작 시 결과를 저장할 리스트 초기화"""
+        self.predict_results = []
+        
+    def predict_step(self, batch, batch_idx):
+        """예측 단계 - 라벨이 없는 데이터에 대한 예측"""
+        img, filenames = batch  # predict_dataset에서 (이미지, 파일명) 반환
+        logits = self(img)
+        
+        # softmax 확률 계산
+        probs = F.softmax(logits, dim=1)
+        
+        # 배치 결과를 저장
+        for i, filename in enumerate(filenames):
+            # 파일명에서 확장자 제거하여 ID 생성
+            file_id = filename.rsplit('.', 1)[0]  # .jpg, .png 등 확장자 제거
+            
+            # 각 클래스별 확률값과 함께 저장
+            result = {
+                'ID': file_id,
+                'probabilities': probs[i].cpu().numpy()
+            }
+            self.predict_results.append(result)
+        
+        return {
+            "probabilities": probs,
+            "filenames": filenames
+        }
+    
+    def on_predict_end(self) -> None:
+        """예측 종료 시 CSV 파일로 저장"""
+        import pandas as pd
+        import numpy as np
+        
+        if not hasattr(self, 'predict_results') or not self.predict_results:
+            print("No prediction results to save.")
+            return
+            
+        # 클래스 이름 가져오기
+        class_names = self.trainer.datamodule.predict_dataset.classes
+        
+        # DataFrame 생성을 위한 데이터 준비
+        data = {'ID': []}
+        for class_name in class_names:
+            data[class_name] = []
+        
+        # 결과 데이터를 DataFrame 형식으로 변환
+        for result in self.predict_results:
+            data['ID'].append(result['ID'])
+            probs = result['probabilities']
+            
+            for i, class_name in enumerate(class_names):
+                data[class_name].append(probs[i])
+        
+        # DataFrame 생성 및 CSV 저장
+        df = pd.DataFrame(data)
+        
+        # ID 기준으로 정렬 (파일명 순서)
+        df = df.sort_values('ID').reset_index(drop=True)
+        
+        # CSV 파일로 저장
+        csv_path = 'predictions.csv'
+        df.to_csv(csv_path, index=False)
+        
+        # 메모리 정리
+        del self.predict_results
+    
     def configure_optimizers(self):
         optimizer = optim.AdamW(
             self.parameters(), 

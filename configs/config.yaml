@@ -1,12 +1,12 @@
 # lightning.pytorch==2.0.0
-name: google/siglip2-giant-opt-patch16-256
-version: v19
+name: tresnet_l-pmd-aug-1
+version: v3
 
 seed_everything: 42
 trainer:
   accelerator: auto
   precision: 16-mixed
-  max_epochs: 200
+  max_epochs: 300
   # deterministic: true
   deterministic: false
   benchmark: true  # CUDA 벤치마킹 활성화로 성능 향상
@@ -23,13 +23,17 @@ model:
   class_path: models.car_classifier.CarClassifier
   init_args:
     net:
-      class_path: nets.hf.HFNetwork
+      class_path: nets.timm.TimmModel
       init_args:
-        model_name: "google/siglip2-giant-opt-patch16-256"
+        model_name: tresnet_l
+        num_classes: 396
+        pretrained: true
     loss_fn:
-      class_path: torch.nn.CrossEntropyLoss
+      class_path: losses.pmd_loss.ProgressiveMarginDecayingLoss
       init_args:
-        label_smoothing: 0.1
+        margin_init: 0.5
+        margin_final: 0.1
+        num_epochs: 300
     learning_rate: 0.0001
     weight_decay: 0.0001
     vis_per_batch: 4
@@ -39,11 +43,9 @@ data:
   class_path: datasets.car_dataset.CarDataModule
   init_args:
     root: datasets  # Update with your actual path
-    batch_size: 1
+    batch_size: 256
     transforms:
       class_path: transforms.car_transforms.CarTransforms
-      init_args:
-        img_size: 256
     num_workers: 4
 
 # optimizer:
