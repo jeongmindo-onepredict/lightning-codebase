@@ -1,6 +1,6 @@
 # lightning.pytorch==2.0.0
-name: tresnet_xl-pmd-aug-1
-version: v4
+name: tresnet_xl-fold-1
+version: v8
 
 seed_everything: 42
 trainer:
@@ -26,7 +26,7 @@ model:
       class_path: nets.timm.TimmModel
       init_args:
         model_name: tresnet_xl
-        num_classes: 396
+        num_classes: 393
         img_size: 600
         pretrained: true
     loss_fn:
@@ -44,7 +44,7 @@ data:
   class_path: datasets.car_dataset.CarDataModule
   init_args:
     root: datasets  # Update with your actual path
-    batch_size: 128
+    batch_size: 32
     transforms:
       class_path: transforms.car_transforms.CarTransforms
     num_workers: 4
