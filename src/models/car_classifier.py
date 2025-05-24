@@ -181,7 +181,6 @@ class CarClassifier(L.LightningModule):
             "probabilities": probs,
             "filenames": filenames
         }
-    
     def on_predict_end(self) -> None:
         """예측 종료 시 CSV 파일로 저장"""
         import pandas as pd
@@ -191,12 +190,22 @@ class CarClassifier(L.LightningModule):
             print("No prediction results to save.")
             return
             
-        # 클래스 이름 가져오기
-        class_names = self.trainer.datamodule.predict_dataset.classes
+        # 기존 클래스 이름 가져오기
+        original_class_names = self.trainer.datamodule.predict_dataset.classes
+        
+        # 추가할 클래스들
+        additional_classes = [
+            'K5_하이브리드_3세대_2020_2023',
+            '디_올뉴니로_2022_2025',
+            '718_박스터_2017_2024'
+        ]
+        
+        # 모든 클래스 이름 합치기
+        all_class_names = original_class_names + additional_classes
         
         # DataFrame 생성을 위한 데이터 준비
         data = {'ID': []}
-        for class_name in class_names:
+        for class_name in all_class_names:
             data[class_name] = []
         
         # 결과 데이터를 DataFrame 형식으로 변환
@@ -204,14 +213,23 @@ class CarClassifier(L.LightningModule):
             data['ID'].append(result['ID'])
             probs = result['probabilities']
             
-            for i, class_name in enumerate(class_names):
+            # 기존 클래스들의 확률값 추가
+            for i, class_name in enumerate(original_class_names):
                 data[class_name].append(probs[i])
+            
+            # 추가 클래스들의 확률값을 0.0으로 설정
+            for class_name in additional_classes:
+                data[class_name].append(0.0)
         
-        # DataFrame 생성 및 CSV 저장
+        # DataFrame 생성
         df = pd.DataFrame(data)
         
         # ID 기준으로 정렬 (파일명 순서)
         df = df.sort_values('ID').reset_index(drop=True)
+        
+        # 컬럼 순서 정렬 (ID는 첫 번째, 나머지는 알파벳 순)
+        class_columns = sorted([col for col in df.columns if col != 'ID'])
+        df = df[['ID'] + class_columns]
         
         # CSV 파일로 저장
         csv_path = 'predictions.csv'
@@ -219,7 +237,7 @@ class CarClassifier(L.LightningModule):
         
         # 메모리 정리
         del self.predict_results
-    
+
     def configure_optimizers(self):
         optimizer = optim.AdamW(
             self.parameters(), 
