@@ -1,12 +1,12 @@
 # lightning.pytorch==2.0.0
-name: fgvc-tresnet-xl
-version: v2
+name: fgvr-tresnet-xl-fold1
+version: v6
 
 seed_everything: 42
 trainer:
   accelerator: auto
   precision: 16-mixed
-  max_epochs: 300
+  max_epochs: 150
   # deterministic: true
   deterministic: false
   benchmark: true  # CUDA 벤치마킹 활성화로 성능 향상
@@ -18,28 +18,37 @@ trainer:
         monitor: ${model_ckpt.monitor}
         mode: ${model_ckpt.mode}
 
-# Model configs
 model:
-  class_path: models.fgvc.TResNetAntiNoiseCarClassifier
+  class_path: models.fgvc.TResNetPMALClassifier
   init_args:
-    backbone_name: "tresnet_xl"  # tresnet_m, tresnet_l, tresnet_xl 중 선택
-    pretrained: true
-    img_size: 448
-    num_classes: 400
-    learning_rate: 1e-4  # 소규모 데이터셋이므로 낮은 학습률
-    weight_decay: 1e-3   # 과적합 방지를 위해 높은 weight decay
-    alpha: 1.0
-    use_sam: false  # 소규모 데이터에서는 AdamW가 더 안정적
-    teacher_path: null
-    distill_phase_ratio: 0.3  # distillation 비율 감소
-    vis_per_batch: 8
+    # === Architecture ===
+    backbone_name: "tresnet_xl"        # XL보다 가벼운 L 사용 (overfitting 방지)
+    pretrained: true                  # 반드시 pretrained 사용
+    img_size: 448                     # 448보다 작게 (메모리 절약 + overfitting 방지)
+    num_classes: 393
+    mode: "pmal"                      # "pmal" 또는 "pmd"
+    
+    # === Learning Rate & Optimization ===
+    learning_rate: 1e-3               # 소규모 데이터셋이므로 낮은 학습률
+    weight_decay: 1e-2                # 강한 regularization (10배 증가)
+    use_sam: true                     # SAM 사용으로 generalization 향상
+    sam_rho: 0.1                      # 더 큰 rho로 더 넓은 minima 탐색
+    
+    # === Regularization ===
+    noise_std: 0.03                   # 작은 노이즈 (데이터가 적으므로)
+    alpha: 50.0                       # PMD시 feature distillation weight 낮춤
+    lambda_reg: 1e-3                  # L2 regularization
+    
+    # === Training Strategy ===
+    teacher_path: null                # PMAL 단계에서는 null
+    distill_phase_ratio: 0.5          # PMD 전환 시점 (전체 epochs의 50%)
 
 # Data configs
 data:
   class_path: datasets.car_dataset.CarDataModule
   init_args:
     root: datasets  # Update with your actual path
-    batch_size: 32
+    batch_size: 8
     transforms:
       class_path: transforms.fgvc.SmallScaleCarTransforms
       init_args:
@@ -54,11 +63,11 @@ data:
 #     momentum: 0.9
 #     weight_decay: 5e-4
 
-lr_scheduler:
-  class_path: LinearWarmupCosineAnnealingLR
-  init_args:
-    warmup_epochs: 20
-    max_epochs: ${trainer.max_epochs}
+# lr_scheduler:
+#   class_path: LinearWarmupCosineAnnealingLR
+#   init_args:
+#     warmup_epochs: 20
+#     max_epochs: ${trainer.max_epochs}
 
 early_stopping:
   monitor: val/acc
