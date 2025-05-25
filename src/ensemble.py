@@ -325,13 +325,15 @@ def main():
         "3.csv",
         "4.csv",
         "5.csv",
-        "siglip.csv"
+        "siglip.csv",
+        "siglip2.csv",
+        "siglip3.csv"
     ]
     
     # 가중치 설정 (선택사항)
     # 모델 성능에 따라 조정 가능
-    # weights = None  # 동등한 가중치
-    weights = [0.14, 0.14, 0.14, 0.14, 0.14, 0.30]  # 사용자 정의 가중치
+    weights = None  # 동등한 가중치
+    # weights = [0.14, 0.14, 0.14, 0.14, 0.14, 0.30]  # 사용자 정의 가중치
     
     try:
         # 앙상블 예측기 초기화
