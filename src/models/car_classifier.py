@@ -158,12 +158,26 @@ class CarClassifier(L.LightningModule):
         self.predict_results = []
         
     def predict_step(self, batch, batch_idx):
-        """예측 단계 - 라벨이 없는 데이터에 대한 예측"""
-        img, filenames = batch  # predict_dataset에서 (이미지, 파일명) 반환
-        logits = self(img)
+        """예측 단계 - TTA(Test Time Augmentation) 적용"""
+        import torchvision.transforms as transforms
         
-        # softmax 확률 계산
-        probs = F.softmax(logits, dim=1)
+        img, filenames = batch  # predict_dataset에서 (이미지, 파일명) 반환
+        
+        all_predictions = []
+        
+        # 원본 이미지 예측
+        with torch.no_grad():
+            logits = self(img)
+            probs = F.softmax(logits, dim=1)
+            all_predictions.append(probs)
+        
+            img_flipped = torch.flip(img, dims=[-1])  # 가로 뒤집기
+            logits_flipped = self(img_flipped)
+            probs_flipped = F.softmax(logits_flipped, dim=1)
+            all_predictions.append(probs_flipped)
+        
+        # 모든 예측 결과의 평균 계산
+        ensemble_probs = torch.stack(all_predictions).mean(dim=0)
         
         # 배치 결과를 저장
         for i, filename in enumerate(filenames):
@@ -173,14 +187,15 @@ class CarClassifier(L.LightningModule):
             # 각 클래스별 확률값과 함께 저장
             result = {
                 'ID': file_id,
-                'probabilities': probs[i].cpu().numpy()
+                'probabilities': ensemble_probs[i].cpu().numpy()
             }
             self.predict_results.append(result)
         
         return {
-            "probabilities": probs,
+            "probabilities": ensemble_probs,
             "filenames": filenames
         }
+
     def on_predict_end(self) -> None:
         """예측 종료 시 CSV 파일로 저장"""
         import pandas as pd
