@@ -1,6 +1,6 @@
 # lightning.pytorch==2.0.0
-name: tresnet_xl-fold-1
-version: v19
+name: fgvc-tresnet-xl
+version: v2
 
 seed_everything: 42
 trainer:
@@ -20,24 +20,19 @@ trainer:
 
 # Model configs
 model:
-  class_path: models.car_classifier.CarClassifier
+  class_path: models.fgvc.TResNetAntiNoiseCarClassifier
   init_args:
-    net:
-      class_path: nets.timm.TimmModel
-      init_args:
-        model_name: tresnet_xl
-        num_classes: 393
-        img_size: 600
-        pretrained: true
-    loss_fn:
-      class_path: losses.pmd_loss.ProgressiveMarginDecayingLoss
-      init_args:
-        margin_init: 0.5
-        margin_final: 0.1
-        num_epochs: 300
-    learning_rate: 0.0001
-    weight_decay: 0.0001
-    vis_per_batch: 4
+    backbone_name: "tresnet_xl"  # tresnet_m, tresnet_l, tresnet_xl 중 선택
+    pretrained: true
+    img_size: 448
+    num_classes: 400
+    learning_rate: 1e-4  # 소규모 데이터셋이므로 낮은 학습률
+    weight_decay: 1e-3   # 과적합 방지를 위해 높은 weight decay
+    alpha: 1.0
+    use_sam: false  # 소규모 데이터에서는 AdamW가 더 안정적
+    teacher_path: null
+    distill_phase_ratio: 0.3  # distillation 비율 감소
+    vis_per_batch: 8
 
 # Data configs
 data:
@@ -46,9 +41,10 @@ data:
     root: datasets  # Update with your actual path
     batch_size: 32
     transforms:
-      class_path: transforms.car_transforms.CarTransforms
+      class_path: transforms.fgvc.SmallScaleCarTransforms
       init_args:
-        img_size: 600
+        img_size: 448
+        use_advanced_aug: true  # 고급 증강 사용
     num_workers: 4
 
 # optimizer:
@@ -76,4 +72,3 @@ model_ckpt:
   filename: "best-ep={epoch:02d}-val_acc={val/acc:.4f}"
   auto_insert_metric_name: false
 # ckpt_path: logs/debug-resume/version_0/fit/checkpoints/last.ckpt
-
