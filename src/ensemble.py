@@ -68,7 +68,17 @@ class EnsemblePredictor:
             # 클래스 컬럼이 일치하는지 확인
             df_classes = [col for col in df.columns if col != 'ID']
             if df_classes != self.class_columns:
-                raise ValueError(f"Class columns mismatch in file {i}: {self.csv_files[i]}")
+                # 일치하지 않는 칼럼 확인
+                missing_classes = set(self.class_columns) - set(df_classes)
+                extra_classes = set(df_classes) - set(self.class_columns)
+                if not missing_classes and not extra_classes:
+                    # 모든 클래스가 일치하지만 순서가 다를 경우
+                    self.class_columns = sorted(self.class_columns)
+                    df_classes = sorted(df_classes)
+                    if df_classes != self.class_columns:
+                        raise ValueError(f"Class columns order mismatch in file {i}: {self.csv_files[i]}")
+                else:
+                    raise ValueError(f"Class columns mismatch in file {i}: {self.csv_files[i]}")
         
         print(f"✓ All files validated successfully")
         print(f"✓ Number of samples: {len(self.ids)}")
@@ -319,16 +329,17 @@ def main():
         print(f"  {i}. {file}")
     
     # 방법 2: 수동으로 파일 지정 (필요시 주석 해제)
-    prediction_files = [
-        "1.csv",
-        "2.csv", 
-        "3.csv",
-        "4.csv",
-        "5.csv",
-        "siglip.csv",
-        "siglip2.csv",
-        "siglip3.csv"
-    ]
+    # prediction_files = [
+    #     # "1.csv",
+    #     # "2.csv", 
+    #     # "3.csv",
+    #     # "4.csv",
+    #     # "5.csv",
+    #     "siglip.csv",
+    #     "siglip1fold-1.csv",
+    #     # "siglip2.csv",
+    #     # "siglip3.csv"
+    # ]
     
     # 가중치 설정 (선택사항)
     # 모델 성능에 따라 조정 가능
