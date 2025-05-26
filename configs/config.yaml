@@ -1,6 +1,6 @@
 # lightning.pytorch==2.0.0
-name: fgvc-tresnet-xl
-version: v2
+name: fgvc-tresnet-xl-fold1
+version: v1
 
 seed_everything: 42
 trainer:
