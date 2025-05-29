@@ -5,8 +5,12 @@ import torch.nn.functional as F
 import lightning as L
 from lightning.pytorch.loggers import WandbLogger
 from torchmetrics import Accuracy
+import numpy as np
 try:
     import wandb
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from sklearn.metrics import confusion_matrix
 finally:
     pass
 
@@ -37,6 +41,10 @@ class CarClassifier(L.LightningModule):
         self.val_accuracy = Accuracy(task="multiclass", num_classes=self.net.num_classes)
         self.test_accuracy = Accuracy(task="multiclass", num_classes=self.net.num_classes)
         
+        # Validation 결과 저장을 위한 리스트
+        self.val_predictions = []
+        self.val_references = []
+        
     def forward(self, x):
         return self.net(x)
     
@@ -47,6 +55,14 @@ class CarClassifier(L.LightningModule):
         # WandbLogger 확인 및 시각화 설정
         self.is_wandb = isinstance(self.logger, WandbLogger)
         self.vis_per_batch = self.vis_per_batch if self.is_wandb else 0
+        
+        # matplotlib 한글 폰트 설정 (한국어 클래스명 지원)
+        try:
+            plt.rcParams["font.family"] = "NanumGothic"
+            plt.rcParams["axes.unicode_minus"] = False
+        except:
+            # 폰트 설정 실패 시 기본 설정 유지
+            pass
 
     def training_step(self, batch, batch_idx):
         img, labels = batch
@@ -74,6 +90,10 @@ class CarClassifier(L.LightningModule):
         # 시각화를 위한 wandb 테이블 초기화
         if self.vis_per_batch and self.is_wandb:
             self.val_table = wandb.Table(columns=["image", "true_label", "pred_label"])
+        
+        # Validation 결과 초기화
+        self.val_predictions = []
+        self.val_references = []
     
     def validation_step(self, batch, batch_idx):
         img, labels = batch
@@ -85,6 +105,10 @@ class CarClassifier(L.LightningModule):
         # 정확도 계산
         preds = torch.argmax(logits, dim=1)
         acc = self.val_accuracy(preds, labels)
+        
+        # 예측 결과 저장 (confusion matrix를 위해)
+        self.val_predictions.extend(preds.cpu().numpy())
+        self.val_references.extend(labels.cpu().numpy())
         
         # 로깅
         self.log_dict(
@@ -139,6 +163,67 @@ class CarClassifier(L.LightningModule):
         # Wandb 테이블 로깅
         if self.vis_per_batch and self.is_wandb and hasattr(self, "val_table"):
             self.logger.experiment.log({"val/samples": self.val_table})
+        
+        # Confusion Matrix 생성 및 로깅
+        if self.is_wandb and len(self.val_predictions) > 0:
+            self.log_confusion_matrix()
+    
+    def log_confusion_matrix(self):
+        """Confusion Matrix를 생성하고 W&B에 로깅"""
+        try:
+            # numpy 배열로 변환
+            preds = np.array(self.val_predictions)
+            refs = np.array(self.val_references)
+            
+            # 클래스 이름 가져오기
+            if hasattr(self.trainer.datamodule.train_dataset, "classes"):
+                labels = self.trainer.datamodule.train_dataset.classes
+            else:
+                labels = [f"Class_{i}" for i in range(self.net.num_classes)]
+            
+            # Confusion Matrix 생성
+            cm = confusion_matrix(refs, preds)
+            np.fill_diagonal(cm, 0)  # 정답 예측은 제거하여 혼동만 표시
+            
+            # Top-N 가장 혼동이 많은 클래스들 찾기
+            top_n = min(20, len(labels))  # 최대 20개 또는 전체 클래스 수 중 작은 값
+            misclassified_counts = cm.sum(axis=1)
+            top_true_classes = np.argsort(misclassified_counts)[::-1][:top_n]
+            
+            # 각 혼동 클래스에 대해 가장 많이 혼동되는 예측 클래스 찾기
+            top_confused_classes = set(top_true_classes)
+            for cls in top_true_classes:
+                most_confused_pred = np.argmax(cm[cls])
+                top_confused_classes.add(most_confused_pred)
+            
+            # 서브 매트릭스 추출
+            top_confused_classes = sorted(top_confused_classes)
+            reduced_cm = cm[np.ix_(top_confused_classes, top_confused_classes)]
+            reduced_labels = [labels[i] for i in top_confused_classes]
+            
+            # Confusion Matrix 플롯 생성
+            plt.figure(figsize=(12, 10))
+            sns.heatmap(
+                reduced_cm,
+                annot=True,
+                fmt="d",
+                cmap="Blues",
+                xticklabels=reduced_labels,
+                yticklabels=reduced_labels,
+            )
+            plt.title(f"Top-{top_n} Confused Classes (Validation) - epoch {self.current_epoch}")
+            plt.xlabel("Predicted Label")
+            plt.ylabel("True Label")
+            plt.xticks(rotation=45, ha='right')
+            plt.yticks(rotation=0)
+            plt.tight_layout()
+            
+            # W&B에 로깅
+            self.logger.experiment.log({"val/confusion_matrix": wandb.Image(plt)})
+            plt.close()
+                
+        except Exception as e:
+            print(f"Error logging confusion matrix: {e}")
     
     def test_step(self, batch, batch_idx):
         img, labels = batch
@@ -158,9 +243,7 @@ class CarClassifier(L.LightningModule):
         self.predict_results = []
         
     def predict_step(self, batch, batch_idx):
-        """예측 단계 - TTA(Test Time Augmentation) 적용"""
-        import torchvision.transforms as transforms
-        
+        """예측 단계 - TTA(Test Time Augmentation) 적용"""        
         img, filenames = batch  # predict_dataset에서 (이미지, 파일명) 반환
         
         all_predictions = []

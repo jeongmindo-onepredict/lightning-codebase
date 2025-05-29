@@ -12,6 +12,9 @@ from typing import Optional, Dict, Any
 import timm
 try:
     import wandb
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from sklearn.metrics import confusion_matrix
 except ImportError:
     wandb = None
 
@@ -299,6 +302,10 @@ class TResNetAntiNoiseCarClassifier(L.LightningModule):
         self.train_accuracy = Accuracy(task="multiclass", num_classes=num_classes)
         self.val_accuracy = Accuracy(task="multiclass", num_classes=num_classes)
         
+        # Validation 결과 저장을 위한 리스트
+        self.val_predictions = []
+        self.val_references = []
+        
         # 노이즈 변환 시퀀스
         self._setup_augmentations()
     
@@ -384,6 +391,14 @@ class TResNetAntiNoiseCarClassifier(L.LightningModule):
         self.is_wandb = isinstance(self.logger, WandbLogger)
         self.vis_per_batch = self.vis_per_batch if self.is_wandb else 0
         
+        # matplotlib 한글 폰트 설정 (한국어 클래스명 지원)
+        try:
+            plt.rcParams["font.family"] = "NanumGothic"
+            plt.rcParams["axes.unicode_minus"] = False
+        except:
+            # 폰트 설정 실패 시 기본 설정 유지
+            pass
+        
         # Distillation 페이즈 에포크 계산
         self.distill_epochs = int(self.trainer.max_epochs * self.distill_phase_ratio)
     
@@ -425,6 +440,11 @@ class TResNetAntiNoiseCarClassifier(L.LightningModule):
         
         return loss
     
+    def on_validation_epoch_start(self) -> None:
+        # Validation 결과 초기화
+        self.val_predictions = []
+        self.val_references = []
+    
     def validation_step(self, batch, batch_idx):
         inputs, targets = batch
         
@@ -435,12 +455,78 @@ class TResNetAntiNoiseCarClassifier(L.LightningModule):
         preds = torch.argmax(logits, dim=1)
         acc = self.val_accuracy(preds, targets)
         
+        # 예측 결과 저장 (confusion matrix를 위해)
+        self.val_predictions.extend(preds.cpu().numpy())
+        self.val_references.extend(targets.cpu().numpy())
+        
         self.log_dict({
             "val/loss": loss,
             "val/acc": acc,
         }, on_epoch=True, prog_bar=True)
         
         return {"loss": loss, "preds": preds, "targets": targets}
+    
+    def on_validation_epoch_end(self) -> None:
+        # Confusion Matrix 생성 및 로깅
+        if self.is_wandb and len(self.val_predictions) > 0:
+            self.log_confusion_matrix()
+    
+    def log_confusion_matrix(self):
+        """Confusion Matrix를 생성하고 W&B에 로깅"""
+        try:
+            # numpy 배열로 변환
+            preds = np.array(self.val_predictions)
+            refs = np.array(self.val_references)
+            
+            # 클래스 이름 가져오기
+            if hasattr(self.trainer.datamodule.train_dataset, "classes"):
+                labels = self.trainer.datamodule.train_dataset.classes
+            else:
+                labels = [f"Class_{i}" for i in range(self.num_classes)]
+            
+            # Confusion Matrix 생성
+            cm = confusion_matrix(refs, preds)
+            np.fill_diagonal(cm, 0)  # 정답 예측은 제거하여 혼동만 표시
+            
+            # Top-N 가장 혼동이 많은 클래스들 찾기
+            top_n = min(20, len(labels))  # 최대 20개 또는 전체 클래스 수 중 작은 값
+            misclassified_counts = cm.sum(axis=1)
+            top_true_classes = np.argsort(misclassified_counts)[::-1][:top_n]
+            
+            # 각 혼동 클래스에 대해 가장 많이 혼동되는 예측 클래스 찾기
+            top_confused_classes = set(top_true_classes)
+            for cls in top_true_classes:
+                most_confused_pred = np.argmax(cm[cls])
+                top_confused_classes.add(most_confused_pred)
+            
+            # 서브 매트릭스 추출
+            top_confused_classes = sorted(top_confused_classes)
+            reduced_cm = cm[np.ix_(top_confused_classes, top_confused_classes)]
+            reduced_labels = [labels[i] for i in top_confused_classes]
+            
+            # Confusion Matrix 플롯 생성
+            plt.figure(figsize=(12, 10))
+            sns.heatmap(
+                reduced_cm,
+                annot=True,
+                fmt="d",
+                cmap="Blues",
+                xticklabels=reduced_labels,
+                yticklabels=reduced_labels,
+            )
+            plt.title(f"Top-{top_n} Confused Classes (Validation) - epoch {self.current_epoch}")
+            plt.xlabel("Predicted Label")
+            plt.ylabel("True Label")
+            plt.xticks(rotation=45, ha='right')
+            plt.yticks(rotation=0)
+            plt.tight_layout()
+            
+            # W&B에 로깅
+            self.logger.experiment.log({"val/confusion_matrix": wandb.Image(plt)})
+            plt.close()
+            
+        except Exception as e:
+            print(f"Error logging confusion matrix: {e}")
     
     def configure_optimizers(self):
         # 백본과 분류기에 다른 학습률 적용
