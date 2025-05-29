@@ -88,7 +88,7 @@ class CarClassifier(L.LightningModule):
     
     def on_validation_epoch_start(self) -> None:
         # 시각화를 위한 wandb 테이블 초기화
-        if self.vis_per_batch and self.is_wandb:
+        if self.vis_per_batch:
             self.val_table = wandb.Table(columns=["image", "true_label", "pred_label"])
         
         # Validation 결과 초기화
@@ -121,7 +121,7 @@ class CarClassifier(L.LightningModule):
         )
         
         # 샘플 시각화
-        if self.vis_per_batch and self.is_wandb:
+        if self.vis_per_batch:
             self.visualize_samples(img, labels, preds, batch_idx)
         
         return {"loss": loss, "preds": preds, "labels": labels}
@@ -131,8 +131,8 @@ class CarClassifier(L.LightningModule):
             return
             
         # 데이터로더에서 클래스 이름 가져오기
-        if hasattr(self.trainer.datamodule.train_dataset, "classes"):
-            class_names = self.trainer.datamodule.train_dataset.classes
+        if hasattr(self.trainer.datamodule.val_dataset, "classes"):
+            class_names = self.trainer.datamodule.val_dataset.classes
         else:
             class_names = [str(i) for i in range(self.net.num_classes)]
             
@@ -161,11 +161,11 @@ class CarClassifier(L.LightningModule):
 
     def on_validation_epoch_end(self) -> None:
         # Wandb 테이블 로깅
-        if self.vis_per_batch and self.is_wandb and hasattr(self, "val_table"):
+        if self.vis_per_batch and hasattr(self, "val_table"):
             self.logger.experiment.log({"val/samples": self.val_table})
         
         # Confusion Matrix 생성 및 로깅
-        if self.is_wandb and len(self.val_predictions) > 0:
+        if len(self.val_predictions) > 0:
             self.log_confusion_matrix()
     
     def log_confusion_matrix(self):
@@ -176,8 +176,8 @@ class CarClassifier(L.LightningModule):
             refs = np.array(self.val_references)
             
             # 클래스 이름 가져오기
-            if hasattr(self.trainer.datamodule.train_dataset, "classes"):
-                labels = self.trainer.datamodule.train_dataset.classes
+            if hasattr(self.trainer.datamodule.val_dataset, "classes"):
+                labels = self.trainer.datamodule.val_dataset.classes
             else:
                 labels = [f"Class_{i}" for i in range(self.net.num_classes)]
             

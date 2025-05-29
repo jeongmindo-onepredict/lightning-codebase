@@ -110,6 +110,11 @@ class CarDataModule(L.LightningDataModule):
             self.num_classes = len(self.train_dataset.classes)
             print(f"Dataset loaded with {self.num_classes} classes")
         
+        if stage == "validate" or stage is None:
+            self.val_dataset = CarDataset(
+                self.root, transform=self.val_transform, train=False
+            )
+        
         if stage == "test" or stage is None:
             self.test_dataset = CarDataset(
                 self.root, transform=self.test_transform, train=False
