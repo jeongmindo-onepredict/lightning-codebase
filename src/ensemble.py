@@ -246,12 +246,12 @@ class EnsemblePredictor:
         os.makedirs(output_dir, exist_ok=True)
         
         methods = {
-            'simple_average': self.simple_average,
-            'weighted_average': self.weighted_average,
-            'geometric_mean': self.geometric_mean,
-            'harmonic_mean': self.harmonic_mean,
-            'rank_average': self.rank_average,
-            'power_average': lambda: self.power_average(power=2.0),
+            # 'simple_average': self.simple_average,
+            # 'weighted_average': self.weighted_average,
+            # 'geometric_mean': self.geometric_mean,
+            # 'harmonic_mean': self.harmonic_mean,
+            # 'rank_average': self.rank_average,
+            # 'power_average': lambda: self.power_average(power=2.0),
             'confidence_weighted': self.confidence_weighted_average,
         }
         

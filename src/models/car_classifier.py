@@ -169,8 +169,12 @@ class CarClassifier(L.LightningModule):
             self.log_confusion_matrix()
     
     def log_confusion_matrix(self):
-        """Confusion Matrix를 생성하고 W&B에 로깅"""
+        """상위 60개 혼동 클래스에 대한 Confusion Matrix를 고해상도로 생성하고 W&B에 로깅"""
         try:
+            # PIL 이미지 크기 제한 해제
+            from PIL import Image
+            Image.MAX_IMAGE_PIXELS = None
+            
             # numpy 배열로 변환
             preds = np.array(self.val_predictions)
             refs = np.array(self.val_references)
@@ -185,8 +189,8 @@ class CarClassifier(L.LightningModule):
             cm = confusion_matrix(refs, preds)
             np.fill_diagonal(cm, 0)  # 정답 예측은 제거하여 혼동만 표시
             
-            # Top-N 가장 혼동이 많은 클래스들 찾기
-            top_n = min(20, len(labels))  # 최대 20개 또는 전체 클래스 수 중 작은 값
+            # Top-60 가장 혼동이 많은 클래스들 찾기
+            top_n = min(60, len(labels))  # 최대 60개 또는 전체 클래스 수 중 작은 값
             misclassified_counts = cm.sum(axis=1)
             top_true_classes = np.argsort(misclassified_counts)[::-1][:top_n]
             
@@ -201,29 +205,76 @@ class CarClassifier(L.LightningModule):
             reduced_cm = cm[np.ix_(top_confused_classes, top_confused_classes)]
             reduced_labels = [labels[i] for i in top_confused_classes]
             
-            # Confusion Matrix 플롯 생성
-            plt.figure(figsize=(12, 10))
+            # 클래스 이름이 너무 길면 축약
+            def truncate_label(label, max_len=25):
+                if len(label) > max_len:
+                    return label[:max_len-3] + "..."
+                return label
+            
+            truncated_labels = [truncate_label(label) for label in reduced_labels]
+            
+            # 고해상도 Confusion Matrix 플롯 생성
+            plt.rcParams['font.family'] = 'NanumGothic'  # 한글 폰트 설정
+            
+            # 적절한 figure 크기와 DPI 설정
+            fig = plt.figure(figsize=(25, 20), dpi=300)
+            ax = fig.add_subplot(111)
+            
+            # Heatmap 생성 (텍스트 표시)
             sns.heatmap(
                 reduced_cm,
                 annot=True,
                 fmt="d",
                 cmap="Blues",
-                xticklabels=reduced_labels,
-                yticklabels=reduced_labels,
+                xticklabels=truncated_labels,
+                yticklabels=truncated_labels,
+                ax=ax,
+                annot_kws={'size': 6},  # 텍스트 크기 조정
+                cbar_kws={'shrink': 0.8},
+                square=True
             )
-            plt.title(f"Top-{top_n} Confused Classes (Validation) - epoch {self.current_epoch}")
-            plt.xlabel("Predicted Label")
-            plt.ylabel("True Label")
-            plt.xticks(rotation=45, ha='right')
-            plt.yticks(rotation=0)
+            
+            # 제목과 레이블 설정
+            ax.set_title(f"Top-{top_n} Confused Classes (Validation) - Epoch {self.current_epoch}", 
+                        fontsize=18, pad=20)
+            ax.set_xlabel("Predicted Label", fontsize=14)
+            ax.set_ylabel("True Label", fontsize=14)
+            
+            # 틱 라벨 설정 (회전각도 조정)
+            ax.tick_params(axis='x', labelsize=8, rotation=45)
+            ax.tick_params(axis='y', labelsize=8, rotation=0)
+            
+            # x축 라벨을 위쪽으로 이동
+            ax.xaxis.tick_top()
+            ax.xaxis.set_label_position('top')
+            
             plt.tight_layout()
             
-            # W&B에 로깅
-            self.logger.experiment.log({"val/confusion_matrix": wandb.Image(plt)})
-            plt.close()
+            # 로컬에 고해상도 이미지로 먼저 저장
+            save_path = f"confusion_matrix_top60_epoch_{self.current_epoch}.png"
+            plt.savefig(save_path, dpi=300, bbox_inches='tight', 
+                       facecolor='white', edgecolor='none', pad_inches=0.3)
+            
+            # W&B에는 파일 경로로 로깅 (메모리 효율적)
+            try:
+                self.logger.experiment.log({
+                    "val/confusion_matrix_top60": wandb.Image(save_path, caption=f"Top-{top_n} Confused Classes - Epoch {self.current_epoch}")
+                })
+            except Exception as wandb_error:
+                print(f"W&B logging failed: {wandb_error}")
+                print("Confusion matrix saved locally only.")
+            
+            plt.close(fig)  # 메모리 절약을 위해 figure 명시적으로 닫기
+            
+            print(f"Top-{top_n} confusion matrix saved: {save_path}")
+            print(f"Matrix shape: {reduced_cm.shape}")
+            print(f"Selected classes: {len(top_confused_classes)}")
+            print(f"Most confused classes: {[labels[i] for i in top_true_classes[:5]]}")
                 
         except Exception as e:
             print(f"Error logging confusion matrix: {e}")
+            import traceback
+            traceback.print_exc()
     
     def test_step(self, batch, batch_idx):
         img, labels = batch
