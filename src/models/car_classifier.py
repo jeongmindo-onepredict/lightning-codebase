@@ -187,7 +187,7 @@ class CarClassifier(L.LightningModule):
             self.log_confusion_matrix()
     
     def log_confusion_matrix(self):
-        """상위 60개 혼동 클래스에 대한 Confusion Matrix를 고해상도로 생성하고 W&B에 로깅"""
+        """상위 40개 혼동 클래스에 대한 Confusion Matrix를 고해상도로 생성하고 W&B에 로깅"""
         try:
             # PIL 이미지 크기 제한 해제
             from PIL import Image
@@ -207,8 +207,8 @@ class CarClassifier(L.LightningModule):
             cm = confusion_matrix(refs, preds)
             np.fill_diagonal(cm, 0)  # 정답 예측은 제거하여 혼동만 표시
             
-            # Top-60 가장 혼동이 많은 클래스들 찾기
-            top_n = min(60, len(labels))  # 최대 60개 또는 전체 클래스 수 중 작은 값
+            # Top-40 가장 혼동이 많은 클래스들 찾기
+            top_n = min(40, len(labels))  # 최대 40개 또는 전체 클래스 수 중 작은 값
             misclassified_counts = cm.sum(axis=1)
             top_true_classes = np.argsort(misclassified_counts)[::-1][:top_n]
             
@@ -269,14 +269,14 @@ class CarClassifier(L.LightningModule):
             plt.tight_layout()
             
             # 로컬에 고해상도 이미지로 먼저 저장
-            save_path = f"confusion_matrix_top60_epoch_{self.current_epoch}.png"
+            save_path = f"confusion_matrix_top40_epoch_{self.current_epoch}.png"
             plt.savefig(save_path, dpi=300, bbox_inches='tight', 
                        facecolor='white', edgecolor='none', pad_inches=0.3)
             
             # W&B에는 파일 경로로 로깅 (메모리 효율적)
             try:
                 self.logger.experiment.log({
-                    "val/confusion_matrix_top60": wandb.Image(save_path, caption=f"Top-{top_n} Confused Classes - Epoch {self.current_epoch}")
+                    "val/confusion_matrix_top40": wandb.Image(save_path, caption=f"Top-{top_n} Confused Classes - Epoch {self.current_epoch}")
                 })
             except Exception as wandb_error:
                 print(f"W&B logging failed: {wandb_error}")

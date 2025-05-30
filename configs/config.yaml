@@ -1,6 +1,6 @@
 # lightning.pytorch==2.0.0
-name: hybrid-tresnet-xl
-version: v1
+name: heavy-aug-391-fold1
+version: v2
 
 seed_everything: 42
 trainer:
