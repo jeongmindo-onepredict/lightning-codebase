@@ -27,3 +27,6 @@ Dockerfile
 test
 *.out
 *.csv
+
+venv
+*.png
