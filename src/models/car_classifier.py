@@ -251,11 +251,16 @@ class CarClassifier(L.LightningModule):
         self.val_references.clear()
     
     def log_confusion_matrix(self):
-        """상위 40개 혼동 클래스에 대한 Confusion Matrix를 고해상도로 생성하고 W&B에 로깅"""
+        """상위 20개 혼동 클래스에 대한 Confusion Matrix를 생성하고 W&B에 로깅"""
         try:
-            # PIL 이미지 크기 제한 해제
-            from PIL import Image
-            Image.MAX_IMAGE_PIXELS = None
+            import wandb
+            import seaborn as sns
+            import matplotlib.pyplot as plt
+            from sklearn.metrics import confusion_matrix
+            
+            # matplotlib 한글 폰트 설정
+            plt.rcParams["font.family"] = "NanumGothic"
+            plt.rcParams["axes.unicode_minus"] = False
             
             # numpy 배열로 변환
             preds = np.array(self.val_predictions)
@@ -271,93 +276,80 @@ class CarClassifier(L.LightningModule):
             cm = confusion_matrix(refs, preds)
             np.fill_diagonal(cm, 0)  # 정답 예측은 제거하여 혼동만 표시
             
-            # Top-40 가장 혼동이 많은 클래스들 찾기
-            top_n = min(40, len(labels))  # 최대 40개 또는 전체 클래스 수 중 작은 값
+            # Step 1: 가장 많이 틀린 상위 40개 클래스 찾기 (행 기준)
+            top_n = 40
             misclassified_counts = cm.sum(axis=1)
             top_true_classes = np.argsort(misclassified_counts)[::-1][:top_n]
             
-            # 각 혼동 클래스에 대해 가장 많이 혼동되는 예측 클래스 찾기
+            # Step 2: 각 클래스마다 가장 많이 혼동되는 예측 클래스 추가 (열 기준)
             top_confused_classes = set(top_true_classes)
             for cls in top_true_classes:
                 most_confused_pred = np.argmax(cm[cls])
                 top_confused_classes.add(most_confused_pred)
             
-            # 서브 매트릭스 추출
+            # Step 3: 서브매트릭스 추출
             top_confused_classes = sorted(top_confused_classes)
             reduced_cm = cm[np.ix_(top_confused_classes, top_confused_classes)]
             reduced_labels = [labels[i] for i in top_confused_classes]
             
-            # 클래스 이름이 너무 길면 축약
-            def truncate_label(label, max_len=25):
-                if len(label) > max_len:
-                    return label[:max_len-3] + "..."
-                return label
+            # 클래스 이름 축약 (40개 클래스에 적합하게)
+            def truncate_label(label, max_len=15):
+                if len(label) <= max_len:
+                    return label
+                return label[:max_len-3] + "..."
             
             truncated_labels = [truncate_label(label) for label in reduced_labels]
             
-            # 고해상도 Confusion Matrix 플롯 생성
-            plt.rcParams['font.family'] = 'NanumGothic'  # 한글 폰트 설정
+            # Confusion Matrix 플롯 생성 (40개 클래스에 적합한 크기)
+            plt.figure(figsize=(24, 20))
             
-            # 적절한 figure 크기와 DPI 설정
-            fig = plt.figure(figsize=(25, 20), dpi=300)
-            ax = fig.add_subplot(111)
-            
-            # Heatmap 생성 (텍스트 표시)
-            sns.heatmap(
+            # Heatmap 생성 (40개 클래스용 설정)
+            ax = sns.heatmap(
                 reduced_cm,
                 annot=True,
                 fmt="d",
                 cmap="Blues",
                 xticklabels=truncated_labels,
                 yticklabels=truncated_labels,
-                ax=ax,
-                annot_kws={'size': 6},  # 텍스트 크기 조정
-                cbar_kws={'shrink': 0.8},
-                square=True
+                cbar_kws={'shrink': 0.6},
+                annot_kws={'size': 6}  # 텍스트 크기 줄임
             )
             
-            # 제목과 레이블 설정
-            ax.set_title(f"Top-{top_n} Confused Classes (Validation) - Epoch {self.current_epoch}", 
-                        fontsize=18, pad=20)
-            ax.set_xlabel("Predicted Label", fontsize=14)
-            ax.set_ylabel("True Label", fontsize=14)
+            # 제목과 축 레이블 설정
+            plt.title(f"Top-{top_n} Confused Classes - Epoch {self.current_epoch}", 
+                    fontsize=16, pad=20)
+            plt.xlabel("Predicted Label", fontsize=12)
+            plt.ylabel("True Label", fontsize=12)
             
-            # 틱 라벨 설정 (회전각도 조정)
-            ax.tick_params(axis='x', labelsize=8, rotation=45)
-            ax.tick_params(axis='y', labelsize=8, rotation=0)
+            # x축 레이블 회전 및 정렬로 겹침 방지 (40개용)
+            plt.xticks(rotation=45, ha='right', fontsize=8)
+            plt.yticks(rotation=0, fontsize=8)
             
-            # x축 라벨을 위쪽으로 이동
-            ax.xaxis.tick_top()
-            ax.xaxis.set_label_position('top')
-            
+            # 레이아웃 조정
             plt.tight_layout()
             
-            # 로컬에 고해상도 이미지로 먼저 저장
-            save_path = f"confusion_matrix_top40_epoch_{self.current_epoch}.png"
-            plt.savefig(save_path, dpi=300, bbox_inches='tight', 
-                       facecolor='white', edgecolor='none', pad_inches=0.3)
-            
-            # W&B에는 파일 경로로 로깅 (메모리 효율적)
-            try:
+            # W&B에 로깅
+            if self.is_wandb:
                 self.logger.experiment.log({
-                    "val/confusion_matrix_top40": wandb.Image(save_path, caption=f"Top-{top_n} Confused Classes - Epoch {self.current_epoch}")
+                    "val/confusion_matrix": wandb.Image(plt)
                 })
-            except Exception as wandb_error:
-                print(f"W&B logging failed: {wandb_error}")
-                print("Confusion matrix saved locally only.")
             
-            plt.close(fig)  # 메모리 절약을 위해 figure 명시적으로 닫기
+            # 로컬 저장
+            save_path = f"confusion_matrix_epoch_{self.current_epoch}.png"
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
             
-            print(f"Top-{top_n} confusion matrix saved: {save_path}")
+            plt.close()
+            
+            print(f"Confusion matrix saved: {save_path}")
             print(f"Matrix shape: {reduced_cm.shape}")
             print(f"Selected classes: {len(top_confused_classes)}")
             print(f"Most confused classes: {[labels[i] for i in top_true_classes[:5]]}")
-                
+                    
         except Exception as e:
             print(f"Error logging confusion matrix: {e}")
             import traceback
             traceback.print_exc()
-    
+
     def test_step(self, batch, batch_idx):
         img, labels = batch
         logits = self(img)
