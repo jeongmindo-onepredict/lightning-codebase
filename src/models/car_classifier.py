@@ -19,12 +19,9 @@ class CarClassifier(L.LightningModule):
         self,
         net: nn.Module,
         loss_fn: nn.Module,
-        margin_init: float = 0.5,
-        margin_final: float = 0.1,
         learning_rate: float = 1e-4,
         weight_decay: float = 1e-4,
-        vis_per_batch: int = 4,
-        max_wrong_samples: int = 150,  # 틀린 샘플 최대 개수
+        max_wrong_samples_per_epoch: int = 150,  # 매 에폭당 틀린 샘플 최대 개수
     ):
         super().__init__()
         self.save_hyperparameters(ignore=["net"])
@@ -32,8 +29,7 @@ class CarClassifier(L.LightningModule):
         self.net = net
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
-        self.vis_per_batch = vis_per_batch
-        self.max_wrong_samples = max_wrong_samples
+        self.max_wrong_samples_per_epoch = max_wrong_samples_per_epoch
         
         # 사용자 정의 손실 함수 초기화
         self.criterion = loss_fn
@@ -56,7 +52,6 @@ class CarClassifier(L.LightningModule):
         
         # WandbLogger 확인 및 시각화 설정
         self.is_wandb = isinstance(self.logger, WandbLogger)
-        self.vis_per_batch = self.vis_per_batch if self.is_wandb else 0
         
         # matplotlib 한글 폰트 설정 (한국어 클래스명 지원)
         try:
@@ -89,14 +84,12 @@ class CarClassifier(L.LightningModule):
         self.log("pmd/margin", self.criterion.current_margin)
     
     def on_validation_epoch_start(self) -> None:
-        # 시각화를 위한 wandb 테이블 초기화 (틀린 예측만)
-        if self.vis_per_batch:
-            self.wrong_predictions_table = wandb.Table(columns=["image", "true_label", "pred_label", "confidence"])
-            self.wrong_samples_count = 0  # 틀린 샘플 카운터
-        
         # Validation 결과 초기화
         self.val_predictions = []
         self.val_references = []
+        self.val_images = []  # 이미지 저장용
+        self.val_indices = []  # 인덱스 저장용 (선택사항)
+
     
     def validation_step(self, batch, batch_idx):
         img, labels = batch
@@ -109,9 +102,13 @@ class CarClassifier(L.LightningModule):
         preds = torch.argmax(logits, dim=1)
         acc = self.val_accuracy(preds, labels)
         
-        # 예측 결과 저장 (confusion matrix를 위해)
+        # 예측 결과 및 이미지 저장 (confusion matrix와 틀린 샘플 로깅을 위해)
         self.val_predictions.extend(preds.cpu().numpy())
         self.val_references.extend(labels.cpu().numpy())
+        
+        # 이미지를 CPU로 이동하여 저장 (메모리 효율을 위해 필요한 만큼만)
+        if self.is_wandb:
+            self.val_images.extend([img_tensor.cpu().clone() for img_tensor in img])
         
         # 로깅
         self.log_dict(
@@ -123,68 +120,135 @@ class CarClassifier(L.LightningModule):
             prog_bar=True,
         )
         
-        # 틀린 예측 샘플만 시각화
-        if self.vis_per_batch and self.wrong_samples_count < self.max_wrong_samples:
-            self.visualize_wrong_predictions(img, labels, preds, logits)
-        
         return {"loss": loss, "preds": preds, "labels": labels}
     
-    def visualize_wrong_predictions(self, images, labels, preds, logits):
-        """틀린 예측만 시각화하는 함수"""
+    def log_wrong_predictions_to_wandb(self):
+        """허깅페이스 스타일로 틀린 예측들을 W&B에 로깅"""
+        if not self.is_wandb or not hasattr(self, 'val_images'):
+            return
+            
         # 데이터로더에서 클래스 이름 가져오기
         if hasattr(self.trainer.datamodule.val_dataset, "classes"):
             class_names = self.trainer.datamodule.val_dataset.classes
         else:
-            class_names = [str(i) for i in range(self.net.num_classes)]
+            class_names = [f"Class_{i}" for i in range(self.net.num_classes)]
+        
+        # 틀린 예측 찾기
+        preds = np.array(self.val_predictions)
+        refs = np.array(self.val_references)
+        wrong_mask = preds != refs
+        wrong_indices = np.where(wrong_mask)[0]
+        
+        if len(wrong_indices) == 0:
+            print("No wrong predictions found!")
+            return
+        
+        # W&B 테이블 생성
+        table = wandb.Table(columns=["image", "true_label", "pred_label"])
+        
+        # ImageNet 정규화 값 (CPU에서)
+        mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+        
+        # 최대 150개로 제한
+        max_samples = min(self.max_wrong_samples_per_epoch, len(wrong_indices))
+        selected_indices = wrong_indices[:max_samples]
+        
+        for idx in selected_indices:
+            # 이미지 처리
+            img = self.val_images[idx].clone()
             
-        # ImageNet 정규화 값을 사용하여 역정규화 수행
-        mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1).to(images.device)
-        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1).to(images.device)
+            # 역정규화 수행
+            img = img * std + mean
+            
+            # [0, 1] 범위로 클리핑 후 [0, 255] 범위로 변환
+            img = torch.clamp(img, 0, 1).permute(1, 2, 0).numpy()
+            img = (img * 255).astype("uint8")
+            
+            true_label = class_names[refs[idx]]
+            pred_label = class_names[preds[idx]]
+            
+            table.add_data(
+                wandb.Image(img),
+                true_label,
+                pred_label
+            )
         
-        # 예측 확률 계산
-        probs = F.softmax(logits, dim=1)
+        # W&B에 로깅
+        self.logger.experiment.log({
+            f"val/wrong_predictions": table
+        })
+
+    
+    def log_wrong_predictions_hf_style(self, preds, refs):
+        """HuggingFace 스타일로 틀린 예측 로깅"""
+        import wandb
         
-        # 각 샘플에 대해 틀린 예측만 시각화
-        for i in range(len(images)):
-            # 최대 개수에 도달하면 중단
-            if self.wrong_samples_count >= self.max_wrong_samples:
+        table = wandb.Table(columns=["image", "true_label", "pred_label"])
+        
+        wrong_idx = preds != refs
+        val_dataset = self.trainer.datamodule.val_dataset
+        
+        # 클래스 이름
+        if hasattr(val_dataset, "classes"):
+            class_names = val_dataset.classes
+        else:
+            class_names = [f"Class_{i}" for i in range(self.net.num_classes)]
+        
+        cnt = 0
+        for idx in np.where(wrong_idx)[0].tolist():
+            if cnt >= self.max_wrong_samples_per_epoch:
                 break
                 
-            # 틀린 예측인지 확인
-            if preds[i] != labels[i]:
-                # 이미지 역정규화
-                img = images[i].clone()  # 원본 이미지 복사
-                img = img * std + mean   # 역정규화
+            # 원본 데이터셋에서 이미지 가져오기
+            try:
+                # val_dataset[idx]에서 이미지 추출
+                sample = val_dataset[idx]
+                if isinstance(sample, dict) and 'image' in sample:
+                    image = sample['image']
+                elif isinstance(sample, tuple):
+                    image = sample[0]  # (image, label) 형태
+                else:
+                    continue
+                    
+                # PIL 이미지면 바로 사용, 텐서면 변환
+                if hasattr(image, 'save'):  # PIL 이미지
+                    wandb_image = wandb.Image(image)
+                else:  # 텐서
+                    from torchvision.transforms import ToPILImage
+                    to_pil = ToPILImage()
+                    wandb_image = wandb.Image(to_pil(image))
                 
-                # [0, 1] 범위로 클리핑 후 [0, 255] 범위로 변환
-                img = torch.clamp(img, 0, 1).permute(1, 2, 0).cpu().numpy()
-                img = (img * 255).astype("uint8")
-                
-                true_label = class_names[labels[i].item()]
-                pred_label = class_names[preds[i].item()]
-                confidence = probs[i][preds[i]].item()  # 예측 클래스의 확률
-                
-                self.wrong_predictions_table.add_data(
-                    wandb.Image(img),
-                    true_label,
-                    pred_label,
-                    f"{confidence:.3f}"
+                table.add_data(
+                    wandb_image,
+                    class_names[refs[idx]],
+                    class_names[preds[idx]]
                 )
+                cnt += 1
                 
-                self.wrong_samples_count += 1
-
-    def on_validation_epoch_end(self) -> None:
-        # 틀린 예측 Wandb 테이블 로깅
-        if self.vis_per_batch and hasattr(self, "wrong_predictions_table"):
+            except Exception as e:
+                print(f"Error processing image {idx}: {e}")
+                continue
+        
+        if cnt > 0:
             self.logger.experiment.log({
-                "val/wrong_predictions": self.wrong_predictions_table,
-                "val/wrong_samples_logged": self.wrong_samples_count
+                f"val/wrong_predictions": table
             })
-            print(f"Logged {self.wrong_samples_count} wrong predictions to W&B")
+        
+    def on_validation_epoch_end(self) -> None:
+        # 틀린 예측 W&B 로깅
+        if self.is_wandb and len(self.val_predictions) > 0:
+            self.log_wrong_predictions_to_wandb()
         
         # Confusion Matrix 생성 및 로깅
         if len(self.val_predictions) > 0:
             self.log_confusion_matrix()
+        
+        # 메모리 정리
+        if hasattr(self, 'val_images'):
+            del self.val_images
+        self.val_predictions.clear()
+        self.val_references.clear()
     
     def log_confusion_matrix(self):
         """상위 40개 혼동 클래스에 대한 Confusion Matrix를 고해상도로 생성하고 W&B에 로깅"""
