@@ -22,3 +22,7 @@ torchvision
 # logging
 wandb
 tensorboardX
+
+matplotlib
+seaborn
+timm
