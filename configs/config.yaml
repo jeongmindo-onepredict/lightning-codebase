@@ -1,6 +1,6 @@
 # lightning.pytorch==2.0.0
-name: tresnet_xl-fold-1
-version: v19
+name: heavy-aug-391-fold1
+version: v2
 
 seed_everything: 42
 trainer:
@@ -18,38 +18,38 @@ trainer:
         monitor: ${model_ckpt.monitor}
         mode: ${model_ckpt.mode}
 
-# Model configs
 model:
-  class_path: models.car_classifier.CarClassifier
+  class_path: models.CarClassifier
   init_args:
     net:
       class_path: nets.timm.TimmModel
       init_args:
         model_name: tresnet_xl
-        num_classes: 393
-        img_size: 600
+        num_classes: 391
+        img_size: 448
         pretrained: true
     loss_fn:
-      class_path: losses.pmd_loss.ProgressiveMarginDecayingLoss
+      class_path: losses.ProgressiveMarginDecayingLoss
       init_args:
         margin_init: 0.5
         margin_final: 0.1
         num_epochs: 300
+    margin_init: 0.5
+    margin_final: 0.1
     learning_rate: 0.0001
     weight_decay: 0.0001
     vis_per_batch: 4
 
-# Data configs
 data:
-  class_path: datasets.car_dataset.CarDataModule
+  class_path: datasets.CarDataModule
   init_args:
-    root: datasets  # Update with your actual path
-    batch_size: 32
+    root: datasets
+    batch_size: 128
     transforms:
-      class_path: transforms.car_transforms.CarTransforms
+      class_path: transforms.CarTransforms
       init_args:
-        img_size: 600
-    num_workers: 4
+        img_size: 448
+    num_workers: 8
 
 # optimizer:
 #   class_path: SGD
@@ -76,4 +76,3 @@ model_ckpt:
   filename: "best-ep={epoch:02d}-val_acc={val/acc:.4f}"
   auto_insert_metric_name: false
 # ckpt_path: logs/debug-resume/version_0/fit/checkpoints/last.ckpt
-
