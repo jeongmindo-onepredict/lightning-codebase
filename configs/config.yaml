@@ -1,6 +1,6 @@
 # lightning.pytorch==2.0.0
-name: heavy-aug-391-fold1
-version: v2
+name: 391-fold1
+version: v1
 
 seed_everything: 42
 trainer:
@@ -34,11 +34,9 @@ model:
         margin_init: 0.5
         margin_final: 0.1
         num_epochs: 300
-    margin_init: 0.5
-    margin_final: 0.1
     learning_rate: 0.0001
     weight_decay: 0.0001
-    vis_per_batch: 4
+    vis_per_batch: 50
 
 data:
   class_path: datasets.CarDataModule
