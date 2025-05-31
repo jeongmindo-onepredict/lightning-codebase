@@ -488,8 +488,4 @@ class CarClassifier(L.LightningModule):
                 "interval": "epoch",
                 "frequency": 1,
             },
-<<<<<<< HEAD
         }
-=======
-        }
->>>>>>> f30c470 (init)
