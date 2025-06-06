@@ -6,6 +6,7 @@ import lightning as L
 from lightning.pytorch.loggers import WandbLogger
 from torchmetrics import Accuracy
 import numpy as np
+from lightning.pytorch.utilities.rank_zero import rank_zero_only
 try:
     import wandb
     import matplotlib.pyplot as plt
@@ -235,6 +236,7 @@ class CarClassifier(L.LightningModule):
                 f"val/wrong_predictions": table
             })
         
+    @rank_zero_only
     def on_validation_epoch_end(self) -> None:
         # 틀린 예측 W&B 로깅
         if self.is_wandb and len(self.val_predictions) > 0:
