@@ -1,5 +1,5 @@
 # lightning.pytorch==2.0.0
-name: tresnet_new
+name: tresnet_new-gammafold4
 version: v2
 
 seed_everything: 42
