@@ -26,7 +26,7 @@ model:
       init_args:
         model_name: tresnet_xl
         num_classes: 391
-        img_size: 600
+        img_size: 448
         pretrained: true
     loss_fn:
       class_path: losses.ProgressiveMarginDecayingLoss
@@ -46,7 +46,7 @@ data:
     transforms:
       class_path: transforms.CarTransforms
       init_args:
-        img_size: 600
+        img_size: 448
     num_workers: 8
 
 # optimizer:
