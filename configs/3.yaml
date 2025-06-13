@@ -42,7 +42,7 @@ data:
   class_path: datasets.CarDataModule
   init_args:
     root: datasets
-    batch_size: 32
+    batch_size: 64
     transforms:
       class_path: transforms.CarTransforms
       init_args:
