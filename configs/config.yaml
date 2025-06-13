@@ -1,6 +1,6 @@
 # lightning.pytorch==2.0.0
 name: tresnet_new
-version: v2
+version: v3
 
 seed_everything: 42
 trainer:
@@ -42,7 +42,7 @@ data:
   class_path: datasets.CarDataModule
   init_args:
     root: datasets
-    batch_size: 32
+    batch_size: 128
     transforms:
       class_path: transforms.CarTransforms
       init_args:
